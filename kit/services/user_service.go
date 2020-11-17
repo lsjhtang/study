@@ -9,5 +9,8 @@ type User struct {
 }
 
 func (u *User) GetName(id int) string {
-	return string(id)
+	if id > 0 {
+		return "abc"
+	}
+	return "string(id)"
 }

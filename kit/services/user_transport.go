@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func EncodeRequest(ctx context.Context, r http.Request) (interface{}, error) {
+func DecodeRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 
 	if uid := r.URL.Query().Get("uid"); uid != ""{
 		uid, _ := strconv.Atoi(uid)
@@ -17,8 +17,8 @@ func EncodeRequest(ctx context.Context, r http.Request) (interface{}, error) {
 	return nil, errors.New("参数不存在")
 }
 
-func DecodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error  {
-	w.Header().Set("Content-Type","json")
+func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error  {
+	w.Header().Set("Content-Type","application/json")
 	return json.NewEncoder(w).Encode(response)
 
 }
