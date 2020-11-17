@@ -1,0 +1,33 @@
+syntax = "proto3";
+package services;
+
+import "Models.proto";
+
+enum ProAreas{
+    A = 0;
+    B = 1;
+    C = 2;
+}
+
+service ProdService {
+    rpc GetProdStock (Request) returns (Response) {}
+    rpc GetProdStocks (QuerySize) returns (ResponseList) {}
+    rpc GetProdInfo (Request) returns (ProdModel) {}
+}
+
+message Request {//请求
+    int32 prod_id = 1;
+    ProAreas prod_area = 2;
+}
+
+message QuerySize {//分页
+    int32 size = 1;
+}
+
+message Response {//响应
+    int32 prod_stock = 1;
+}
+
+message ResponseList {//响应列表
+    repeated Response prodreq=1;
+}
