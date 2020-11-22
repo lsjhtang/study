@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func DecodeRequest(ctx context.Context, r *http.Request) (interface{}, error) {
+func DecodeRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mymux.Vars(r)
 	if uid, ok := vars["uid"]; ok {
 		uid, _ := strconv.Atoi(uid)
@@ -18,7 +18,7 @@ func DecodeRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	return nil, errors.New("参数不存在")
 }
 
-func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func EncodeResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(response)
 
