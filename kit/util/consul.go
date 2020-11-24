@@ -1,45 +1,57 @@
 package util
 
 import (
+	"fmt"
 	"github.com/hashicorp/consul/api"
+	"strconv"
+	"time"
 )
 
 var (
-	client *api.Client
-	err    error
+	apiClient   *api.Client
+	err         error
+	ServiceId   string
+	ServiceName string
+	ServicePort int
 )
 
 func init() {
 	config := api.DefaultConfig()
 	config.Address = "192.168.87.129:8500"
-	client, err = api.NewClient(config)
+	apiClient, err = api.NewClient(config)
 	if err != nil {
 		panic(err)
 	}
+	ServiceId = "userService" + strconv.FormatInt(time.Now().UnixNano(), 10)
+}
+
+func SetNameAndPort(name string, port int) {
+	ServiceName = name
+	ServicePort = port
 }
 
 func RegisterService() {
 	reg := api.AgentServiceRegistration{}
-	reg.ID = "userService"
-	reg.Name = "userService"
+	reg.ID = ServiceId
+	reg.Name = ServiceName
 	reg.Address = "172.20.10.13"
-	reg.Port = 8080
+	reg.Port = ServicePort
 	reg.Tags = []string{"primary"}
 
 	check := api.AgentServiceCheck{}
 	check.Interval = "5s"
-	check.HTTP = "http://172.20.10.13:8080/user/101"
+	check.HTTP = fmt.Sprintf("http://%s:%d/user/101", reg.Address, reg.Port)
 
 	reg.Check = &check
 
-	err = client.Agent().ServiceRegister(&reg) //注册
+	err = apiClient.Agent().ServiceRegister(&reg) //注册
 	if err != nil {
 		panic(err)
 	}
 }
 
 func DeregisterService() {
-	err = client.Agent().ServiceDeregister("userService") //反注册
+	err = apiClient.Agent().ServiceDeregister(ServiceId) //反注册
 	if err != nil {
 		panic(err)
 	}
