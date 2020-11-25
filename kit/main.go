@@ -12,6 +12,7 @@ import (
 	httptransport "github.com/go-kit/kit/transport/http"
 	mymux "github.com/gorilla/mux"
 	"github.com/hashicorp/consul/api"
+	"golang.org/x/time/rate"
 	"io"
 	"kit/clients"
 	"kit/services"
@@ -39,7 +40,10 @@ func main() {
 
 	user := new(services.User)
 
-	endpoints := services.GetEndpoint(user)
+	limit := rate.NewLimiter(1, 6)
+	endpoints := services.RateLimit(limit)(services.GetEndpoint(user))
+
+	//endpoints := services.GetEndpoint(user)
 
 	service := httptransport.NewServer(endpoints, services.DecodeRequest, services.EncodeResponse)
 
@@ -66,7 +70,7 @@ func main() {
 	if err != nil {
 		util.DeregisterService() //反注册
 
-		panic(err)
+		fmt.Println(err)
 	}
 }
 

@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"errors"
 	"github.com/go-kit/kit/endpoint"
+	"golang.org/x/time/rate"
 	"kit/util"
 	"net/http"
 	"strconv"
@@ -23,5 +25,18 @@ func GetEndpoint(userServices IUserService) endpoint.Endpoint {
 		re := request.(Request)
 		result := userServices.GetName(re.Uid) + ":" + strconv.Itoa(util.ServicePort)
 		return Response{Status: http.StatusOK, Data: map[string]interface{}{"result": result}}, nil
+	}
+}
+
+func RateLimit(limit *rate.Limiter) endpoint.Middleware {
+	return func(next endpoint.Endpoint) endpoint.Endpoint {
+
+		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+			if !limit.Allow() {
+				return nil, errors.New("错误")
+			}
+			return next(ctx, request)
+		}
+
 	}
 }
