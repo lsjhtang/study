@@ -26,7 +26,7 @@ import (
 	"time"
 )
 
-func main() {
+func main3() {
 	name := flag.String("name", "", "服务名称")
 	port := flag.Int("p", 0, "服务端口")
 	flag.Parse()
@@ -44,8 +44,11 @@ func main() {
 	endpoints := services.RateLimit(limit)(services.GetEndpoint(user))
 
 	//endpoints := services.GetEndpoint(user)
+	options := []httptransport.ServerOption{ //自定义错误
+		httptransport.ServerErrorEncoder(services.MyErrorEncode),
+	}
 
-	service := httptransport.NewServer(endpoints, services.DecodeRequest, services.EncodeResponse)
+	service := httptransport.NewServer(endpoints, services.DecodeRequest, services.EncodeResponse, options...)
 
 	router := mymux.NewRouter()
 	router.Handle(`/user/{uid:\d+}`, service)
@@ -74,7 +77,7 @@ func main() {
 	}
 }
 
-func main3() { //去注册中心取服务地址然后调用服务api
+func main() { //去注册中心取服务地址然后调用服务api
 	config := api.DefaultConfig()
 	config.Address = "192.168.87.129:8500"
 	apiClient, err := api.NewClient(config)

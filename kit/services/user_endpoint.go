@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"github.com/go-kit/kit/endpoint"
 	"golang.org/x/time/rate"
 	"kit/util"
@@ -33,7 +32,7 @@ func RateLimit(limit *rate.Limiter) endpoint.Middleware {
 
 		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 			if !limit.Allow() {
-				return nil, errors.New("错误")
+				return nil, util.NewMyError(429, "错误", []interface{}{})
 			}
 			return next(ctx, request)
 		}
