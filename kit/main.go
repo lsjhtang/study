@@ -26,7 +26,7 @@ import (
 	"time"
 )
 
-func main3() {
+func main() {
 	name := flag.String("name", "", "服务名称")
 	port := flag.Int("p", 0, "服务端口")
 	flag.Parse()
@@ -77,7 +77,7 @@ func main3() {
 	}
 }
 
-func main() { //去注册中心取服务地址然后调用服务api
+func main3() { //去注册中心取服务地址然后调用服务api
 	config := api.DefaultConfig()
 	config.Address = "192.168.87.129:8500"
 	apiClient, err := api.NewClient(config)
@@ -90,7 +90,7 @@ func main() { //去注册中心取服务地址然后调用服务api
 
 	tags := []string{"primary"}
 
-	instancer := consul.NewInstancer(client, logger, "userService", tags, true)
+	instancer := consul.NewInstancer(client, logger, "userServices", tags, true)
 
 	f := func(instance string) (endpoint.Endpoint, io.Closer, error) {
 		tgt, _ := url.Parse("http://" + instance)
@@ -101,7 +101,10 @@ func main() { //去注册中心取服务地址然后调用服务api
 
 	mylb := lb.NewRoundRobin(endpointer) //内置轮询算法
 	for {
-		response, _ := mylb.Endpoint()
+		response, err := mylb.Endpoint()
+		if err != nil {
+			fmt.Println(err)
+		}
 		res, err := response(context.Background(), clients.Request{Uid: 100})
 		if err != nil {
 			fmt.Println(err)
