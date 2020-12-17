@@ -10,16 +10,16 @@ func main() {
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
 		var ips string
-		if getIp() == "192.168.63.133" {
+		if getIp() == "192.168.87.130" {
 			ips = "main"
 		} else {
 			ips = "work1"
 		}
 		c.JSON(200, gin.H{
-			"message": ips,
+			"message": getIp() + ips,
 		})
 	})
-	err := r.Run(":8080") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	err := r.Run(":80") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
