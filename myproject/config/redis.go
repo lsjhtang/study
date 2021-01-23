@@ -4,10 +4,10 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-var Redis redis.Conn
+var RedisPool *redis.Pool
 
 func init() {
-	Redis = newPool().Get()
+	RedisPool = newPool()
 }
 
 func newPool() *redis.Pool {

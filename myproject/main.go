@@ -38,7 +38,7 @@ type Property struct {
 
 func NewProperty() *Property {
 	return &Property{
-		GameId: "670",
+		GameId: "680",
 		ChannelId: map[string]bool{
 			"8999": true, "8981": true, "8980": true, "8910": true, "8228": true, "8003": true, "7878": true, "7877": true, "7876": true, "6994": true, "6268": true, "6168": true,
 			"5924": true, "5832": true, "5017": true, "4928": true, "4527": true, "4526": true, "4525": true, "4524": true, "4523": true, "4522": true, "4515": true, "4285": true,
@@ -68,20 +68,54 @@ func main() {
 }
 
 func getUserInfo(c *gin.Context) {
-	checkAll(c, BASE)
-	user, err := getUser(c)
+	err := checkAll(c, BASE)
 	if err != nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "用户信息不存在", DataMap{}))
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, err.Error(), DataMap{}))
 		return
 	}
-	num, _ := strconv.Atoi(user["Num"].(string))
+	user, err := getUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, err.Error(), DataMap{}))
+		return
+	}
+	num := 0
+	if _, ok := user["Num"].(string); ok {
+		num, _ = strconv.Atoi(user["Num"].(string))
+	} else {
+		num = user["Num"].(int)
+	}
+
 	data := DataMap{"user": user, "user_task2": num + 1}
 	getUserTask(c, &data)
 	c.JSON(http.StatusOK, newResponse(http.StatusOK, "初始化成功", data))
+	return
 }
 
 func task1(c *gin.Context) {
-	checkAll(c, TASK1)
+	err := checkAll(c, TASK1)
+	if err != nil {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, err.Error(), DataMap{}))
+		return
+	}
+	pRedis := RedisPool.Get()
+	defer pRedis.Close()
+	uid := c.Keys["uid"].(string)
+	taskKey := getRedisKey(2, uid)
+	val, _ := redis.String(pRedis.Do("hGet", taskKey))
+	if val == "0" {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "不能重复领取", DataMap{}))
+		return
+	}
+
+	result, err := getRole(uid, "214808494346334", 1)
+	if err != nil {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, err.Error(), DataMap{}))
+		return
+	}
+	if result.(int) < 1 {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先登入游戏", DataMap{}))
+		return
+	}
 }
 
 func task2(c *gin.Context) {
@@ -96,29 +130,31 @@ func task3(c *gin.Context) {
 func getUserTask(c *gin.Context, m *DataMap) {
 	uid := c.Keys["uid"].(string)
 	cacheKey := getRedisKey(2, uid)
-	newTask, _ := redis.StringMap(Redis.Do("HGETALL", cacheKey))
+	pRedis := RedisPool.Get()
+	defer pRedis.Close()
+	newTask, _ := redis.StringMap(pRedis.Do("HGETALL", cacheKey))
 	if len(newTask) == 0 {
 		newTask = map[string]string{"1": "1", "2": "1"}
-		Redis.Do("hMset", redis.Args{}.Add(cacheKey).AddFlat(newTask)...)
-		Redis.Do("EXPIRE", cacheKey, 86400*30)
+		_, _ = pRedis.Do("hMset", redis.Args{}.Add(cacheKey).AddFlat(newTask)...)
+		_, _ = pRedis.Do("EXPIRE", cacheKey, 86400*30)
 	}
 	(*m)["user_task1"] = newTask
 
 	cacheKey = getRedisKey(3, uid)
-	signTask, _ := redis.String(Redis.Do("hGet", cacheKey, uid))
-	if signTask == "" {
+	signTask, err := redis.String(pRedis.Do("hGet", cacheKey, uid))
+	if err != nil {
 		signTask = "1"
-		Redis.Do("hSet", uid, signTask)
-		Redis.Do("EXPIRE", cacheKey, 86400*30)
+		_, _ = pRedis.Do("hSet", cacheKey, uid, signTask)
+		_, _ = pRedis.Do("EXPIRE", cacheKey, 86400*30)
 	}
 	(*m)["user_task2_type"] = signTask
 
 	cacheKey = getRedisKey(4, uid)
-	levelTask, _ := redis.StringMap(Redis.Do("HGETALL", cacheKey))
+	levelTask, _ := redis.StringMap(pRedis.Do("HGETALL", cacheKey))
 	if len(levelTask) == 0 {
 		levelTask = map[string]string{"1": "1", "2": "1", "3": "1"}
-		Redis.Do("hMset", redis.Args{}.Add(cacheKey).AddFlat(levelTask)...)
-		Redis.Do("EXPIRE", cacheKey, 86400*30)
+		_, _ = pRedis.Do("hMset", redis.Args{}.Add(cacheKey).AddFlat(levelTask)...)
+		_, _ = pRedis.Do("EXPIRE", cacheKey, 86400*30)
 	}
 	(*m)["user_task3"] = levelTask
 }
@@ -126,7 +162,12 @@ func getUserTask(c *gin.Context, m *DataMap) {
 func getUser(c *gin.Context) (DataMap, error) {
 	uid := c.Keys["uid"].(string)
 	usrKey := getRedisKey(1, uid)
-	user, err := Redis.Do("HGETALL", usrKey)
+	pRedis := RedisPool.Get()
+	defer pRedis.Close()
+	user, err := pRedis.Do("HGETALL", usrKey)
+	if err != nil {
+		return DataMap{}, err
+	}
 	if len(user.([]interface{})) == 0 {
 		outUser := Models.NewUsers()
 		createUser := Models.Users{
@@ -137,63 +178,62 @@ func getUser(c *gin.Context) (DataMap, error) {
 			CreatedAt: int(time.Now().Unix()),
 		}
 		DB.Table("202012_platact_7_user").Where("user_id = ?", uid).Attrs(createUser).FirstOrCreate(outUser)
-		_, err = Redis.Do("HMSET", redis.Args{}.Add(usrKey).AddFlat(outUser)...)
-		Redis.Do("EXPIRE", usrKey, 86400*30)
+		defer DB.Close()
+		_, err = pRedis.Do("HMSET", redis.Args{}.Add(usrKey).AddFlat(outUser)...)
+		_, _ = pRedis.Do("EXPIRE", usrKey, 86400*30)
 		return StructToMap(outUser), err
 	}
 	return SliceToMap(user), nil
 }
 
-func checkAll(c *gin.Context, t int) {
+func checkAll(c *gin.Context, t int) error {
 	uid, err := c.Cookie("plat_uid")
 	if err != nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先登入1", DataMap{}))
-		return
+		return errors.New("请先登入1")
 	}
 
 	userName, err := c.Cookie("plat_user_name")
 	if err != nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先登入2", DataMap{}))
-		return
+		return errors.New("请先登入2")
 	}
 	c.Set("uid", uid)
 	c.Set("userName", userName)
 	if isWeChatBrowser(c) {
-		isOpenid(c)
+		err = isOpenid(c)
+		if err != nil {
+			return err
+		}
+
 	}
 	switch t {
 	case TASK2:
 		if c.Query("task_id") == "" {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "参数错误1", DataMap{}))
-			return
+			return errors.New("参数错误1")
 		}
 		user, _ := getUser(c)
 		if !checkBindRole(user) {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先绑定角色", DataMap{}))
-			return
+			return errors.New("请先绑定角色")
 		}
 	case TASK3:
 		if c.Query("task_id") == "" {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "参数错误1", DataMap{}))
-			return
+			return errors.New("参数错误1")
 		}
 		if c.Query("type") == "" {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "参数错误2", DataMap{}))
-			return
+			return errors.New("参数错误2")
 		}
 
 		user, _ := getUser(c)
 		if !checkBindRole(user) {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先绑定角色", DataMap{}))
-			return
+			return errors.New("请先绑定角色")
 		}
 	case TASK4:
 		if c.Query("server_id") == "" || c.Query("role_id") == "" {
-			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "缺少必要参数", DataMap{}))
-			return
+			return errors.New("缺少必要参数")
 		}
 	}
-	isChannel(c)
+
+	//return isChannel(c)
+	return nil
 }
 
 func getRedisKey(t int, id string) string {
@@ -201,7 +241,7 @@ func getRedisKey(t int, id string) string {
 	case 1:
 		return CACHEPREFIX + "USER_" + id
 	case 2:
-		return CACHEPREFIX + "NEW_TASK" + id
+		return CACHEPREFIX + "NEW_TASK_" + id
 	case 3:
 		return CACHEPREFIX + time.Now().Format("20060102") + "_TASK"
 	case 4:
@@ -221,13 +261,13 @@ func getRedisKey(t int, id string) string {
 	}
 }
 
-func isOpenid(c *gin.Context) {
+func isOpenid(c *gin.Context) error {
 	key := "WX|$oPoUoNLOGIN"
 	signStr := c.Query("openid") + c.Query("subscribe") + key
 	if fmt.Sprintf("%x", md5.Sum([]byte(signStr))) == c.Query("sign") {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "非法请求", DataMap{}))
-		return
+		return errors.New("非法请求")
 	}
+	return nil
 }
 
 func checkBindRole(dataMap DataMap) bool {
@@ -244,16 +284,14 @@ func isWeChatBrowser(c *gin.Context) bool {
 	return false
 }
 
-func isChannel(c *gin.Context) {
+func isChannel(c *gin.Context) error {
 	infos, err := createRolesInfo(fmt.Sprintf("%s", c.Keys["uid"]))
 	if err != nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "账号信息不存在", DataMap{}))
-		return
+		return errors.New("账号信息不存在")
 	}
 	info, _ := infos.(map[string]interface{})
 	if info[NewProperty().GameId] == nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先创建角色", DataMap{}))
-		return
+		return errors.New("请先创建角色")
 	}
 
 	var roleInfoSort []float64
@@ -272,15 +310,68 @@ func isChannel(c *gin.Context) {
 	sort.Float64s(roleInfoSort)
 	roleChannel, err := getUserChanId(roleInfoMap[roleInfoSort[0]], strconv.FormatFloat(roleInfoSort[0], 'E', -1, 64))
 	if err != nil {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请点击活动页的 <font color='#dc143c'>下载体验</font> 按钮并注册角色再参与活动", DataMap{}))
-		return
+		return errors.New("请点击活动页的 <font color='#dc143c'>下载体验</font> 按钮并注册角色再参与活动")
 	}
 	channelId := roleChannel.(map[string]interface{})["channel_id"].(string)
 	if !NewProperty().ChannelId[channelId] {
-		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请点击活动页的 <font color='#dc143c'>下载体验</font> 按钮并重新 <font color='#dc143c'>注册账号</font> 再参与活动", DataMap{}))
-		return
+		return errors.New("请点击活动页的 <font color='#dc143c'>下载体验</font> 按钮并重新 <font color='#dc143c'>注册账号</font> 再参与活动")
 	}
 	c.Set("ChannelId", channelId)
+	return nil
+}
+
+func getRole(uid, roleId string, level int) (interface{}, error) {
+	data := map[string]string{
+		"id":      "24",
+		"user_id": uid,
+		"time":    strconv.FormatInt(time.Now().Unix(), 10),
+	}
+	getSign(&data)
+	data["ac"] = "activityDataStatistics"
+
+	result, err := getRequest("https://sdk.9187.cn/", &data)
+	if err != nil {
+		return nil, err
+	}
+
+	var result1 map[string]interface{}
+	var ok bool
+	if result1, ok = result.(map[string]interface{}); ok {
+		if level > 0 {
+			if result1, ok = result1["game_info"].(map[string]interface{}); !ok {
+				return nil, errors.New("角色不存在1")
+			}
+
+			if _, ok = result1[NewProperty().GameId]; !ok {
+				return nil, errors.New("角色不存在2")
+			}
+			result1 = result1[NewProperty().GameId].(map[string]interface{})
+			for _, i := range result1 {
+				result1 = i.(map[string]interface{})
+				for _, i2 := range result1 {
+					result1 = i2.(map[string]interface{})
+					if result1["role_id"].(string) == roleId {
+						return result1["role_lev"].(string), nil
+					}
+				}
+			}
+			return nil, errors.New("角色不存在3")
+		} else {
+			reData := map[string]int{}
+			for s := range result1 {
+				if strings.Contains(s, "202") {
+					reData["login"] += 1
+				}
+
+				if strings.Contains(s, "money") {
+					reData["money"] = result1["money"].(int)
+				}
+			}
+			return reData, nil
+		}
+	}
+
+	return nil, errors.New("信息不存在")
 }
 
 func getUserChanId(roleId string, createTime string) (interface{}, error) {
