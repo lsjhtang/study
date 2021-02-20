@@ -56,6 +56,7 @@ func main() {
 		c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Content-Type")
 		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("Content-Type", "application/json; charset=utf-8")
 	})
 	act.Use(gin.Logger(), gin.Recovery())
 	{
@@ -115,6 +116,37 @@ func task1(c *gin.Context) {
 	if result.(int) < 1 {
 		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "请先登入游戏", DataMap{}))
 		return
+	}
+
+	prizes := map[string]map[string]interface{}{
+		"1": {"prize_name": "首发红包", "gift_code": "", "gift_id": 0, "ext": "100", "customer_id": 9},
+		"2": {"prize_name": "首发礼包", "gift_code": "", "gift_id": 818, "ext": "", "customer_id": 2},
+	}
+	prize := prizes[c.Query("task_id")]
+	if _, ok := prizes[c.Query("task_id")]; !ok {
+		c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "参数错误", DataMap{}))
+		return
+	}
+
+	if c.Query("task_id") == "1" {
+		openidKey := getRedisKey(5, "")
+		newNum, _ := redis.String(pRedis.Do("hget", openidKey, uid))
+		if num, _ := strconv.Atoi(newNum); num > 2 {
+			c.JSON(http.StatusOK, newResponse(http.StatusBadRequest, "该微信领取红包次数已达到限额，请更换微信登录账号再试1", DataMap{}))
+			return
+		}
+		redKey := getRedisKey(11, "")
+		moneyNum, _ := redis.String(pRedis.Do("hget", redKey, "money_new_num"))
+		num, _ := strconv.Atoi(moneyNum)
+		if num < 200 {
+			prize["ext"] = "100"
+		} else if num >= 200 && num < 800 {
+			prize["ext"] = "50"
+		} else {
+			prize["ext"] = "30"
+		}
+	} else {
+
 	}
 }
 

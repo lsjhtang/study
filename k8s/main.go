@@ -1,41 +1,23 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
-	"log"
-	"net"
+	"k8s/ginskill/common"
+	"k8s/ginskill/data/mapper"
+	"k8s/ginskill/models"
+	"k8s/ginskill/result"
 )
 
 func main() {
+	fmt.Println(mapper.NewUserMapper().GetUserList().Sql)
+	return
 	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		var ips string
-		if getIp() == "192.168.87.130" {
-			ips = "main"
-		} else {
-			ips = "work1"
-		}
-		c.JSON(200, gin.H{
-			"message": getIp() + ips,
-		})
+	r.Use(common.ErrorHandler())
+	r.GET("/", func(c *gin.Context) {
+		u := models.New()
+		result.Result(c.ShouldBindJSON(u)).Unwrap()
+		result.OKJson(c, u)
 	})
-	err := r.Run(":80") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func getIp() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, value := range addrs {
-		if ipnet, ok := value.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return ""
+	r.Run()
 }
